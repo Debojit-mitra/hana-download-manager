@@ -156,35 +156,79 @@ class DownloadTask:
                         self.num_connections = 1 # Fallback to single connection
 
     async def download_part(self, session, part_id, start, end, current_pos):
-        headers = {'Range': f'bytes={current_pos}-{end}'}
+        retries = 0
+        max_retries = 5
         part_file = os.path.join(self.parts_dir, f"{self.filename}.part{part_id}")
-        try:
-            async with session.get(self.url, headers=headers) as response:
-                if response.status in [200, 206]:
-                    async with aiofiles.open(part_file, 'ab') as f:
-                        async for chunk in response.content.iter_chunked(1024 * 64): # 64KB chunks
-                            if not self._pause_event.is_set():
-                                self.save_state() # Save state when paused
-                                await self._pause_event.wait()
-                            if self.status == TaskStatus.CANCELED:
-                                return
-                            
-                            if self.rate_limiter:
-                                await self.rate_limiter.wait_for_token(len(chunk))
+        
+        while retries < max_retries:
+            try:
+                # Resume from current position
+                current_pos = self.parts_info[part_id]['current']
+                if current_pos > end:
+                    return # Part completed
 
-                            await f.write(chunk)
-                            self.downloaded_size += len(chunk)
-                            self.parts_info[part_id]['current'] += len(chunk)
-                            # Periodically save state (e.g., every 1MB or so? For now, just rely on pause/completion)
-        except Exception as e:
-            print(f"Error downloading part {part_id}: {e}")
-            self.error_message = str(e)
-            self.status = TaskStatus.ERROR
-            self.save_state()
-        except Exception as e:
-            print(f"Error downloading part {part_id}: {e}")
-            self.error_message = str(e)
-            self.status = TaskStatus.ERROR
+                bytes_downloaded_in_attempt = 0
+                headers = {'Range': f'bytes={current_pos}-{end}'}
+                
+                async with session.get(self.url, headers=headers) as response:
+                    if response.status in [200, 206]:
+                        async with aiofiles.open(part_file, 'ab') as f:
+                            async for chunk in response.content.iter_chunked(1024 * 64): # 64KB chunks
+                                if not self._pause_event.is_set():
+                                    self.save_state() # Save state when paused
+                                    await self._pause_event.wait()
+                                if self.status == TaskStatus.CANCELED:
+                                    return
+                                
+                                if self.rate_limiter:
+                                    await self.rate_limiter.wait_for_token(len(chunk))
+
+                                await f.write(chunk)
+                                self.downloaded_size += len(chunk)
+                                self.parts_info[part_id]['current'] += len(chunk)
+                                
+                                # If we successfully download a significant amount (e.g. 500KB),
+                                # we consider the connection healthy and reset the retry counter.
+                                # This prevents cumulative errors over a long download from causing failure.
+                                bytes_downloaded_in_attempt += len(chunk)
+                                if bytes_downloaded_in_attempt > 500 * 1024: # 500KB
+                                    retries = 0
+                                    bytes_downloaded_in_attempt = 0 # Reset tracker to avoid constant assignment
+                
+                # If we get here, the download stream finished normally
+                return
+
+            except (aiohttp.ClientPayloadError, aiohttp.ClientError, asyncio.TimeoutError) as e:
+                retries += 1
+                print(f"Part {part_id} failed (attempt {retries}/{max_retries}): {e}")
+                if retries >= max_retries:
+                    print(f"Error downloading part {part_id}: {e}")
+                    self.error_message = f"Failed after {max_retries} retries: {str(e)}"
+                    self.status = TaskStatus.ERROR
+                    self.save_state()
+                    
+                    # Cancel other parts immediately
+                    if hasattr(self, 'active_tasks'):
+                        for t in self.active_tasks:
+                            if t is not asyncio.current_task() and not t.done():
+                                t.cancel()
+                    return
+                
+                # Wait before retrying (exponential backoff)
+                await asyncio.sleep(1 * retries)
+            
+            except Exception as e:
+                # Non-recoverable error
+                print(f"Critical error in part {part_id}: {e}")
+                self.error_message = str(e)
+                self.status = TaskStatus.ERROR
+                self.save_state()
+                
+                if hasattr(self, 'active_tasks'):
+                    for t in self.active_tasks:
+                        if t is not asyncio.current_task() and not t.done():
+                            t.cancel()
+                return
 
     async def start(self):
         self.status = TaskStatus.DOWNLOADING
@@ -232,7 +276,8 @@ class DownloadTask:
             try:
                 await asyncio.gather(*self.active_tasks)
             except asyncio.CancelledError:
-                self.status = TaskStatus.CANCELED
+                if self.status != TaskStatus.ERROR:
+                    self.status = TaskStatus.CANCELED
             except Exception as e:
                 self.status = TaskStatus.ERROR
                 self.error_message = str(e)
