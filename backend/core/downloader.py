@@ -581,4 +581,59 @@ class DownloadManager:
     def get_all_tasks(self):
         return self.tasks.values()
 
+    async def rename_task(self, task_id: str, new_filename: str):
+        task = self.tasks.get(task_id)
+        if not task:
+            raise Exception("Task not found")
+        
+        if task.filename == new_filename:
+            return
+
+        # Check if new filename exists
+        new_filepath = os.path.join(task.download_dir, new_filename)
+        if os.path.exists(new_filepath):
+             raise Exception("File with this name already exists")
+
+        # Handle active task
+        was_running = False
+        if task.status in [TaskStatus.DOWNLOADING, TaskStatus.EXTRACTING]:
+            was_running = True
+            task.pause()
+            # Wait a bit for pause to take effect and file handles to close
+            await asyncio.sleep(0.5)
+
+        try:
+            old_filename = task.filename
+            
+            # 1. Rename State File
+            old_state_file = task.state_file
+            new_state_file = os.path.join(task.parts_dir, f"{new_filename}.state.json")
+            if os.path.exists(old_state_file):
+                os.rename(old_state_file, new_state_file)
+            task.state_file = new_state_file
+
+            # 2. Rename Parts
+            for i in range(task.num_connections):
+                old_part = os.path.join(task.parts_dir, f"{old_filename}.part{i}")
+                new_part = os.path.join(task.parts_dir, f"{new_filename}.part{i}")
+                if os.path.exists(old_part):
+                    os.rename(old_part, new_part)
+
+            # 3. Rename Final File (if exists/completed)
+            if os.path.exists(task.filepath):
+                os.rename(task.filepath, new_filepath)
+
+            # Update task info
+            task.filename = new_filename
+            task.filepath = new_filepath
+            task.save_state()
+
+        except Exception as e:
+            # Try to revert? For now just raise
+            raise Exception(f"Rename failed: {e}")
+
+        # Resume if it was running
+        if was_running:
+            await self.resume_task(task.id)
+
 manager = DownloadManager()

@@ -83,6 +83,18 @@ export async function refreshDownloadLink(id: string, url: string) {
   });
 }
 
+export async function renameDownload(id: string, filename: string) {
+  const res = await fetch(`${API_BASE_URL}/downloads/${id}/rename`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.detail || "Failed to rename");
+  }
+}
+
 export async function resumeDownload(id: string) {
   await fetch(`${API_BASE_URL}/downloads/${id}/resume`, { method: "POST" });
 }

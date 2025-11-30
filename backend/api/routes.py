@@ -109,6 +109,17 @@ async def refresh_link(task_id: str, request: RefreshLinkRequest):
     task.update_url(request.url)
     return {"status": "link updated"}
 
+class RenameRequest(BaseModel):
+    filename: str
+
+@router.post("/downloads/{task_id}/rename")
+async def rename_download(task_id: str, request: RenameRequest):
+    try:
+        await manager.rename_task(task_id, request.filename)
+        return {"status": "renamed"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.get("/settings")
 async def get_settings():
     return settings_manager.settings

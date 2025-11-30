@@ -6,6 +6,7 @@ import {
   resumeDownload,
   cancelDownload,
   setSpeedLimit,
+  renameDownload,
 } from "@/lib/api";
 import { formatBytes, cn, sliderToSpeed, speedToSlider } from "@/lib/utils";
 import {
@@ -22,6 +23,8 @@ import {
   FileCode,
   FileText,
   RefreshCw,
+  Pencil,
+  Check,
 } from "lucide-react";
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import RefreshLinkModal from "./RefreshLinkModal";
@@ -78,8 +81,107 @@ export default function DownloadList() {
     currentUrl: "",
   });
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
-  // useEffect removed as it's handled in context
+  const startEditing = (task: any) => {
+    setEditingTaskId(task.id);
+    setEditName(task.filename);
+  };
+
+  const handleRename = async (taskId: string) => {
+    if (!editName.trim()) return;
+    try {
+      await renameDownload(taskId, editName.trim());
+      await refreshTasks();
+      setEditingTaskId(null);
+      setEditName("");
+    } catch (e: any) {
+      alert(e.message || "Failed to rename");
+    }
+  };
+
+  const renderActionButtons = (task: any, isMobile = false) => {
+    const btnClass = cn(
+      "rounded-full text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800",
+      isMobile ? "p-1.5" : "p-2"
+    );
+    const iconSize = isMobile ? 16 : 18;
+
+    return (
+      <>
+        {task.status === "downloading" && (
+          <button
+            onClick={() =>
+              setLimitModal({
+                isOpen: true,
+                taskId: task.id,
+                currentLimit: task.speed_limit || 0,
+              })
+            }
+            className={btnClass}
+            title="Set Speed Limit"
+          >
+            <Gauge size={iconSize} />
+          </button>
+        )}
+        {task.status === "downloading" ? (
+          <button
+            onClick={async () => {
+              await pauseDownload(task.id);
+              await refreshTasks();
+            }}
+            className={btnClass}
+          >
+            <Pause size={iconSize} />
+          </button>
+        ) : task.status !== "completed" ? (
+          <button
+            onClick={async () => {
+              await resumeDownload(task.id);
+              await refreshTasks();
+            }}
+            className={btnClass}
+          >
+            <Play size={iconSize} />
+          </button>
+        ) : null}
+
+        {(task.status === "paused" || task.status === "error") && (
+          <button
+            onClick={() =>
+              setRefreshModal({
+                isOpen: true,
+                taskId: task.id,
+                currentUrl: task.url,
+              })
+            }
+            className={btnClass}
+            title="Refresh Link"
+          >
+            <RefreshCw size={iconSize} />
+          </button>
+        )}
+
+        <button
+          onClick={() =>
+            setDeleteModal({
+              isOpen: true,
+              taskId: task.id,
+              filename: task.filename,
+              isCompleted: task.status === "completed",
+            })
+          }
+          className={cn(
+            "rounded-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20",
+            isMobile ? "px-1.5" : "p-2"
+          )}
+        >
+          <X size={isMobile ? 18 : 20} />
+        </button>
+      </>
+    );
+  };
 
   const filteredTasks = tasks.filter((t) => {
     if (activeTab === "active") return t.status !== "completed";
@@ -116,7 +218,7 @@ export default function DownloadList() {
       {filteredTasks.map((task) => (
         <div
           key={task.id}
-          className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 shadow-sm"
+          className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-3 md:p-4 shadow-sm"
         >
           <div className="flex items-center justify-between mb-2">
             <div className={cn("flex items-center gap-3 min-w-0 flex-1 mr-4")}>
@@ -128,12 +230,58 @@ export default function DownloadList() {
                 {getFileIcon(task.filename)}
               </div>
               <div className="min-w-0 flex-1">
-                <h3
-                  className="font-medium text-sm truncate"
-                  title={task.filename}
-                >
-                  {task.filename}
-                </h3>
+                {editingTaskId === task.id ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="text-sm px-1 py-0.5 w-full md:max-w-[400px] border-b dark:bg-transparent focus:outline-none"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRename(task.id);
+                        if (e.key === "Escape") {
+                          setEditingTaskId(null);
+                          setEditName("");
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => handleRename(task.id)}
+                      className="text-green-600 hover:text-green-700"
+                      title="Save"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingTaskId(null);
+                        setEditName("");
+                      }}
+                      className="text-red-600 hover:text-red-700"
+                      title="Cancel"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 group/title">
+                    <h3
+                      className="font-medium text-sm truncate cursor-pointer hover:text-pink-600 transition-colors"
+                      title={task.filename}
+                      onClick={() => startEditing(task)}
+                    >
+                      {task.filename}
+                    </h3>
+                    <button
+                      onClick={() => startEditing(task)}
+                      className="opacity-0 group-hover/title:opacity-100 text-neutral-400 hover:text-pink-500 transition-opacity"
+                      title="Rename"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                )}
                 <p
                   className="text-xs text-neutral-500 dark:text-neutral-400 truncate"
                   title={task.url}
@@ -142,77 +290,12 @@ export default function DownloadList() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {task.status === "downloading" && (
-                <button
-                  onClick={() =>
-                    setLimitModal({
-                      isOpen: true,
-                      taskId: task.id,
-                      currentLimit: task.speed_limit || 0,
-                    })
-                  }
-                  className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full text-neutral-600 dark:text-neutral-400"
-                  title="Set Speed Limit"
-                >
-                  <Gauge size={18} />
-                </button>
-              )}
-              {task.status === "downloading" ? (
-                <button
-                  onClick={async () => {
-                    await pauseDownload(task.id);
-                    await refreshTasks();
-                  }}
-                  className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full text-neutral-600 dark:text-neutral-400"
-                >
-                  <Pause size={18} />
-                </button>
-              ) : task.status !== "completed" ? (
-                <button
-                  onClick={async () => {
-                    await resumeDownload(task.id);
-                    await refreshTasks();
-                  }}
-                  className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full text-neutral-600 dark:text-neutral-400"
-                >
-                  <Play size={18} />
-                </button>
-              ) : null}
-
-              {(task.status === "paused" || task.status === "error") && (
-                <button
-                  onClick={() =>
-                    setRefreshModal({
-                      isOpen: true,
-                      taskId: task.id,
-                      currentUrl: task.url,
-                    })
-                  }
-                  className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full text-neutral-600 dark:text-neutral-400"
-                  title="Refresh Link"
-                >
-                  <RefreshCw size={18} />
-                </button>
-              )}
-
-              <button
-                onClick={() =>
-                  setDeleteModal({
-                    isOpen: true,
-                    taskId: task.id,
-                    filename: task.filename,
-                    isCompleted: task.status === "completed",
-                  })
-                }
-                className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full text-red-600 dark:text-red-400"
-              >
-                <X size={18} />
-              </button>
+            <div className="hidden md:flex items-center gap-2 shrink-0">
+              {renderActionButtons(task)}
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div>
             <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
               <span>
                 {formatBytes(task.downloaded_size)} of{" "}
@@ -224,7 +307,7 @@ export default function DownloadList() {
                   : `${formatBytes(task.speed)}/s`}
               </span>
             </div>
-            <div className="h-2 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+            <div className="h-2 mt-1 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
               <div
                 className={cn(
                   "h-full transition-all duration-300",
@@ -242,7 +325,7 @@ export default function DownloadList() {
                 }}
               />
             </div>
-            <div className="flex justify-between text-xs">
+            <div className="flex items-center justify-between text-xs mt-4 md:mt-2">
               <span
                 className={cn(
                   "capitalize font-medium flex items-center gap-1",
@@ -262,38 +345,43 @@ export default function DownloadList() {
                 )}
                 {task.status}
               </span>
-              <div className="flex gap-2 mt-1">
-                {task.auto_extract && (
-                  <span
-                    className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium border",
-                      task.status === "completed"
+              <div className="flex items-center gap-2">
+                <div className="flex md:hidden items-center gap-1">
+                  {renderActionButtons(task, true)}
+                </div>
+                <div className="flex gap-2">
+                  {task.auto_extract && (
+                    <span
+                      className={cn(
+                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium border",
+                        task.status === "completed"
+                          ? task.extraction_skipped
+                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800"
+                            : "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                          : "bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-900/20 dark:text-pink-400 dark:border-pink-800"
+                      )}
+                    >
+                      {task.status === "completed"
                         ? task.extraction_skipped
-                          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800"
-                          : "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                        : "bg-pink-50 text-pink-700 border-pink-200 dark:bg-pink-900/20 dark:text-pink-400 dark:border-pink-800"
-                    )}
-                  >
-                    {task.status === "completed"
-                      ? task.extraction_skipped
-                        ? "Extraction Skipped"
-                        : "Auto Extracted"
-                      : "Auto Extract On"}
-                  </span>
-                )}
-                {(task.status === "downloading" ||
-                  task.status === "paused") && (
-                  <span
-                    className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium border",
-                      task.supports_resume
-                        ? "bg-green-100 text-green-600 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800"
-                        : "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
-                    )}
-                  >
-                    {task.supports_resume ? "Resumable" : "Non-Resumable"}
-                  </span>
-                )}
+                          ? "Extraction Skipped"
+                          : "Auto Extracted"
+                        : "Auto Extract On"}
+                    </span>
+                  )}
+                  {(task.status === "downloading" ||
+                    task.status === "paused") && (
+                    <span
+                      className={cn(
+                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium border",
+                        task.supports_resume
+                          ? "bg-green-100 text-green-600 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800"
+                          : "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+                      )}
+                    >
+                      {task.supports_resume ? "Resumable" : "Non-Resumable"}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             {task.status === "error" && task.error_message && (
