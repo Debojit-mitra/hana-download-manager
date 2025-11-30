@@ -98,6 +98,17 @@ async def set_speed_limit(task_id: str, request: SpeedLimitRequest):
     task.set_speed_limit(request.limit)
     return {"status": "limit set"}
 
+class RefreshLinkRequest(BaseModel):
+    url: str
+
+@router.post("/downloads/{task_id}/refresh_link")
+async def refresh_link(task_id: str, request: RefreshLinkRequest):
+    task = manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.update_url(request.url)
+    return {"status": "link updated"}
+
 @router.get("/settings")
 async def get_settings():
     return settings_manager.settings

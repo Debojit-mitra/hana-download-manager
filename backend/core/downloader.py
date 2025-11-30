@@ -105,6 +105,13 @@ class DownloadTask:
         else:
             self.rate_limiter = None
 
+    def update_url(self, new_url: str):
+        self.url = new_url
+        if self.status == TaskStatus.ERROR:
+            self.status = TaskStatus.PAUSED
+            self.error_message = None
+        self.save_state()
+
     def save_state(self):
         state = {
             "id": self.id,
@@ -165,14 +172,30 @@ class DownloadTask:
         while retries < max_retries:
             try:
                 # Resume from current position
+                # Resume from current position
                 current_pos = self.parts_info[part_id]['current']
-                if current_pos > end:
+                if end is not None and current_pos > end:
                     return # Part completed
 
                 bytes_downloaded_in_attempt = 0
-                headers = {'Range': f'bytes={current_pos}-{end}'}
+                range_header = f'bytes={current_pos}-'
+                if end is not None:
+                    range_header += str(end)
+                # If end is None, we send 'bytes=current_pos-', asking for everything from current_pos to the end.
+                headers = {'Range': range_header}
                 
                 async with session.get(self.url, headers=headers) as response:
+                    # If we requested a range but got 200 OK, it means the server ignored the range.
+                    # This is bad for multi-part downloads or resuming.
+                    if response.status == 200:
+                        if part_id == 0 and self.num_connections == 1 and current_pos == 0:
+                            # Single connection, starting from scratch. This is fine.
+                            pass
+                        else:
+                            # We are trying to resume or download a part, but server sent the whole file.
+                            # This would corrupt the file by appending the whole file to a part.
+                            raise Exception("Server does not support resuming/ranges (returned 200 OK instead of 206 Partial Content)")
+
                     if response.status in [200, 206]:
                         async with aiofiles.open(part_file, 'ab') as f:
                             async for chunk in response.content.iter_chunked(1024 * 64): # 64KB chunks
@@ -238,9 +261,12 @@ class DownloadTask:
         
         if not self.parts_info:
             if self.total_size == 0:
-                # Handle unknown size or single stream
+                # Handle unknown size or single stream.
+                # We force a single connection because we can't split the file without knowing its size.
+                # 'end': None indicates an open-ended range request (bytes=0-), ensuring we get the full stream
+                # without corruption risks associated with multi-part assembly.
                 self.num_connections = 1
-                self.parts_info = [{'start': 0, 'end': '', 'current': 0}]
+                self.parts_info = [{'start': 0, 'end': None, 'current': 0}]
             else:
                 # Calculate parts
                 part_size = self.total_size // self.num_connections
@@ -249,6 +275,41 @@ class DownloadTask:
                     start = i * part_size
                     end = (i + 1) * part_size - 1 if i < self.num_connections - 1 else self.total_size - 1
                     self.parts_info.append({'start': start, 'end': end, 'current': start})
+        else:
+            # Validate existing parts against current file info
+            if self.total_size > 0:
+                expected_total = sum(p['end'] - p['start'] + 1 for p in self.parts_info[:-1]) + (self.parts_info[-1]['end'] - self.parts_info[-1]['start'] + 1)
+                # Note: The last part's end might be calculated differently or be implicit, but for now let's check basic consistency.
+                # Actually, a simpler check is if self.total_size matches what we expect.
+                # If the file size changed significantly, we can't resume safely.
+                # For now, let's just warn or handle the case where the new URL returns a different size.
+                
+                # If total_size changed, we must reset.
+                # We need to check if the saved total_size matches the new total_size.
+                # But self.total_size was just updated by get_file_info().
+                # We need to compare it with the size implied by parts_info or a saved state.
+                # Since we don't have the "old" total_size handy here (it was overwritten),
+                # we can check if the last part's end matches the new total_size - 1.
+                
+                last_part_end = self.parts_info[-1]['end']
+                if last_part_end != self.total_size - 1:
+                     # File size changed!
+                     print(f"File size changed from {last_part_end + 1} to {self.total_size}. Cannot resume.")
+                     self.parts_info = [] # Force recalculation
+                     self.downloaded_size = 0
+                     # We should probably delete old parts too to avoid corruption
+                     for i in range(self.num_connections):
+                        part_file = os.path.join(self.parts_dir, f"{self.filename}.part{i}")
+                        if os.path.exists(part_file):
+                            os.remove(part_file)
+                     
+                     # Recalculate parts immediately
+                     part_size = self.total_size // self.num_connections
+                     self.parts_info = []
+                     for i in range(self.num_connections):
+                        start = i * part_size
+                        end = (i + 1) * part_size - 1 if i < self.num_connections - 1 else self.total_size - 1
+                        self.parts_info.append({'start': start, 'end': end, 'current': start})
 
         self.session = aiohttp.ClientSession()
         try:

@@ -21,8 +21,10 @@ import {
   Archive,
   FileCode,
   FileText,
+  RefreshCw,
 } from "lucide-react";
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
+import RefreshLinkModal from "./RefreshLinkModal";
 import { useDownloads } from "@/lib/download-context";
 
 function getFileIcon(filename: string) {
@@ -65,6 +67,15 @@ export default function DownloadList() {
     isOpen: false,
     taskId: "",
     currentLimit: 0,
+  });
+  const [refreshModal, setRefreshModal] = useState<{
+    isOpen: boolean;
+    taskId: string;
+    currentUrl: string;
+  }>({
+    isOpen: false,
+    taskId: "",
+    currentUrl: "",
   });
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
 
@@ -168,6 +179,22 @@ export default function DownloadList() {
                   <Play size={18} />
                 </button>
               ) : null}
+
+              {(task.status === "paused" || task.status === "error") && (
+                <button
+                  onClick={() =>
+                    setRefreshModal({
+                      isOpen: true,
+                      taskId: task.id,
+                      currentUrl: task.url,
+                    })
+                  }
+                  className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full text-neutral-600 dark:text-neutral-400"
+                  title="Refresh Link"
+                >
+                  <RefreshCw size={18} />
+                </button>
+              )}
 
               <button
                 onClick={() =>
@@ -300,6 +327,13 @@ export default function DownloadList() {
           await refreshTasks();
           setDeleteModal({ ...deleteModal, isOpen: false });
         }}
+      />
+
+      <RefreshLinkModal
+        isOpen={refreshModal.isOpen}
+        onClose={() => setRefreshModal({ ...refreshModal, isOpen: false })}
+        taskId={refreshModal.taskId}
+        currentUrl={refreshModal.currentUrl}
       />
 
       {/* Simple Speed Limit Modal */}

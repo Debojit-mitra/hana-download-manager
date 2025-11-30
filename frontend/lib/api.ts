@@ -75,6 +75,14 @@ export async function setSpeedLimit(id: string, limit: number) {
   });
 }
 
+export async function refreshDownloadLink(id: string, url: string) {
+  await fetch(`${API_BASE_URL}/downloads/${id}/refresh_link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+}
+
 export async function resumeDownload(id: string) {
   await fetch(`${API_BASE_URL}/downloads/${id}/resume`, { method: "POST" });
 }

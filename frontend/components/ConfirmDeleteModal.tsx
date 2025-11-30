@@ -37,7 +37,7 @@ export default function ConfirmDeleteModal({
         <div className="p-4 space-y-4">
           <p className="text-neutral-600 dark:text-neutral-300">
             Are you sure you want to remove{" "}
-            <span className="font-medium text-neutral-900 dark:text-neutral-100">
+            <span className="font-medium text-neutral-900 dark:text-neutral-100 break-all">
               {filename}
             </span>
             ?
