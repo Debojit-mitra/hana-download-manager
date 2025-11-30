@@ -465,7 +465,7 @@ export default function DownloadList() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setLimitModal({ ...limitModal, isOpen: false })}
-                className="px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 rounded-lg"
+                className="px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800 rounded-lg"
               >
                 Cancel
               </button>
