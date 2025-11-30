@@ -590,7 +590,9 @@ class DownloadManager:
             return
 
         # Check if new filename exists
-        new_filepath = os.path.join(task.download_dir, new_filename)
+        # Use current directory of the file to preserve category (e.g. Archives/)
+        current_dir = os.path.dirname(task.filepath)
+        new_filepath = os.path.join(current_dir, new_filename)
         if os.path.exists(new_filepath):
              raise Exception("File with this name already exists")
 
