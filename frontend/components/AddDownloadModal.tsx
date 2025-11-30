@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { addDownload, checkFileExists } from "@/lib/api";
+import { addDownload, checkFileExists, fetchSettings } from "@/lib/api";
 import { Plus, X, AlertTriangle } from "lucide-react";
 import { sliderToSpeed, speedToSlider } from "@/lib/utils";
 
@@ -11,7 +11,18 @@ export default function AddDownloadModal() {
   const [filename, setFilename] = useState("");
   const [autoExtract, setAutoExtract] = useState(false);
   const [speedLimit, setSpeedLimit] = useState(0);
+  const [maxConnections, setMaxConnections] = useState(0);
+  const [defaultMaxConnections, setDefaultMaxConnections] = useState(4); // Default fallback
   const [fileExists, setFileExists] = useState(false);
+
+  useEffect(() => {
+    fetchSettings().then((settings) => {
+      setDefaultMaxConnections(settings.max_connections_per_task);
+      if (maxConnections === 0) {
+        setMaxConnections(settings.max_connections_per_task);
+      }
+    });
+  }, []);
 
   // Check file existence when filename changes
   useEffect(() => {
@@ -31,12 +42,19 @@ export default function AddDownloadModal() {
     e.preventDefault();
     if (!url) return;
     try {
-      await addDownload(url, filename || undefined, autoExtract, speedLimit);
+      await addDownload(
+        url,
+        filename || undefined,
+        autoExtract,
+        speedLimit,
+        maxConnections
+      );
       setIsOpen(false);
       setUrl("");
       setFilename("");
       setAutoExtract(false);
       setSpeedLimit(0);
+      setMaxConnections(defaultMaxConnections);
       setFileExists(false);
     } catch (e) {
       alert("Failed to add download");
@@ -131,6 +149,46 @@ export default function AddDownloadModal() {
                 1 MB/s
               </span>
               <span className="absolute right-0">50 MB/s</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1 text-neutral-600 dark:text-neutral-300">
+              Max Connections:{" "}
+              <span className="text-pink-500 dark:text-pink-400 font-bold">
+                {maxConnections}
+                {maxConnections === defaultMaxConnections && " (Default)"}
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                type="range"
+                min="1"
+                max="16"
+                step="1"
+                value={maxConnections || defaultMaxConnections}
+                onChange={(e) => setMaxConnections(parseInt(e.target.value))}
+                className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer dark:bg-neutral-700 accent-pink-600 relative z-10"
+              />
+              {/* Default marker */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-1 h-3 bg-neutral-400 dark:bg-neutral-500 pointer-events-none"
+                style={{
+                  left: `${((defaultMaxConnections - 1) / 15) * 100}%`,
+                }}
+              />
+            </div>
+            <div className="relative w-full h-4 mt-1 text-xs text-neutral-500">
+              <span className="absolute left-0">1</span>
+              <span
+                className="absolute -translate-x-1/2"
+                style={{
+                  left: `${((defaultMaxConnections - 1) / 15) * 100}%`,
+                }}
+              >
+                Default
+              </span>
+              <span className="absolute right-0">16</span>
             </div>
           </div>
 

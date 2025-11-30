@@ -1,10 +1,18 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 export interface DownloadTask {
   id: string;
   url: string;
   filename: string;
-  status: "pending" | "downloading" | "paused" | "completed" | "error" | "canceled" | "extracting";
+  status:
+    | "pending"
+    | "downloading"
+    | "paused"
+    | "completed"
+    | "error"
+    | "canceled"
+    | "extracting";
   progress: number;
   total_size: number;
   downloaded_size: number;
@@ -22,18 +30,34 @@ export async function fetchDownloads(): Promise<DownloadTask[]> {
   return res.json();
 }
 
-export async function addDownload(url: string, filename?: string, auto_extract: boolean = false, speed_limit: number = 0) {
+export async function addDownload(
+  url: string,
+  filename?: string,
+  auto_extract: boolean = false,
+  speed_limit: number = 0,
+  max_connections?: number
+) {
   const res = await fetch(`${API_BASE_URL}/downloads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, filename, auto_extract, speed_limit }),
+    body: JSON.stringify({
+      url,
+      filename,
+      auto_extract,
+      speed_limit,
+      max_connections,
+    }),
   });
   if (!res.ok) throw new Error("Failed to add download");
   return res.json();
 }
 
 export async function checkFileExists(filename: string): Promise<boolean> {
-  const res = await fetch(`${API_BASE_URL}/downloads/check_file?filename=${encodeURIComponent(filename)}`);
+  const res = await fetch(
+    `${API_BASE_URL}/downloads/check_file?filename=${encodeURIComponent(
+      filename
+    )}`
+  );
   if (!res.ok) return false;
   const data = await res.json();
   return data.exists;
@@ -56,7 +80,9 @@ export async function resumeDownload(id: string) {
 }
 
 export async function cancelDownload(id: string, deleteFile: boolean = false) {
-  await fetch(`${API_BASE_URL}/downloads/${id}?delete_file=${deleteFile}`, { method: "DELETE" });
+  await fetch(`${API_BASE_URL}/downloads/${id}?delete_file=${deleteFile}`, {
+    method: "DELETE",
+  });
 }
 
 export interface Settings {

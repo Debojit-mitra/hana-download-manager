@@ -9,7 +9,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({
     download_dir: "downloads",
     max_concurrent_downloads: 3,
-    max_connections_per_task: 8,
+    max_connections_per_task: 6,
     organize_files: true,
   });
   const [loading, setLoading] = useState(true);
@@ -25,7 +25,15 @@ export default function SettingsPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await updateSettings(settings);
+      // ensure no NaN/null values are sent
+      const validSettings = {
+        ...settings,
+        max_concurrent_downloads: settings.max_concurrent_downloads || 3,
+        max_connections_per_task: settings.max_connections_per_task || 6,
+      };
+      await updateSettings(validSettings);
+      // Update local state with values if they were invalid
+      setSettings(validSettings);
       alert("Settings saved!");
     } catch (e) {
       alert("Failed to save settings");
@@ -100,7 +108,11 @@ export default function SettingsPage() {
                 type="number"
                 min="1"
                 max="10"
-                value={settings.max_concurrent_downloads}
+                value={
+                  isNaN(settings.max_concurrent_downloads)
+                    ? ""
+                    : settings.max_concurrent_downloads
+                }
                 onChange={(e) =>
                   setSettings({
                     ...settings,
@@ -118,7 +130,11 @@ export default function SettingsPage() {
                 type="number"
                 min="1"
                 max="16"
-                value={settings.max_connections_per_task}
+                value={
+                  isNaN(settings.max_connections_per_task)
+                    ? ""
+                    : settings.max_connections_per_task
+                }
                 onChange={(e) =>
                   setSettings({
                     ...settings,

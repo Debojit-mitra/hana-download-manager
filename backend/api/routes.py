@@ -12,13 +12,14 @@ class DownloadRequest(BaseModel):
     filename: Optional[str] = None
     auto_extract: bool = False
     speed_limit: int = 0 # kbps
+    max_connections: Optional[int] = None
 
 class SpeedLimitRequest(BaseModel):
     limit: int # kbps
 
 @router.post("/downloads")
 async def add_download(request: DownloadRequest):
-    task_id = await manager.add_task(request.url, request.filename, request.auto_extract, request.speed_limit)
+    task_id = await manager.add_task(request.url, request.filename, request.auto_extract, request.speed_limit, request.max_connections)
     return {"id": task_id, "status": "started"}
 
 @router.get("/downloads/check_file")

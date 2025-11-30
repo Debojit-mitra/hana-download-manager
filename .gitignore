@@ -16,6 +16,7 @@ backend/downloads/
 backend/.parts/
 backend/*.db
 backend/state/
+backend/settings.json
 
 # Node / Frontend
 node_modules/

@@ -120,7 +120,8 @@ class DownloadTask:
             "auto_extract": self.auto_extract,
             "speed_limit": self.speed_limit,
             "extraction_skipped": self.extraction_skipped,
-            "supports_resume": self.supports_resume
+            "supports_resume": self.supports_resume,
+            "num_connections": self.num_connections
         }
         with open(self.state_file, 'w') as f:
             json.dump(state, f)
@@ -140,6 +141,7 @@ class DownloadTask:
                 self.extraction_skipped = state.get("extraction_skipped", False)
                 self.supports_resume = state.get("supports_resume", False)
                 self.status = state.get("status", TaskStatus.PENDING)
+                self.num_connections = state.get("num_connections", self.num_connections)
                 return True
         return False
 
@@ -419,7 +421,7 @@ class DownloadManager:
                 return new_filename
             counter += 1
 
-    async def add_task(self, url: str, filename: str = None, auto_extract: bool = False, speed_limit: int = 0):
+    async def add_task(self, url: str, filename: str = None, auto_extract: bool = False, speed_limit: int = 0, max_connections: int = None):
         if not filename:
             filename = url.split('/')[-1] or "downloaded_file"
         
@@ -427,7 +429,10 @@ class DownloadManager:
         filename = self.get_unique_filename(filename)
         
         settings = settings_manager.settings
-        task = DownloadTask(url, filename, settings.download_dir, settings.max_connections_per_task, auto_extract)
+        # Use provided max_connections or fallback to settings
+        connections = max_connections if max_connections and max_connections > 0 else settings.max_connections_per_task
+        
+        task = DownloadTask(url, filename, settings.download_dir, connections, auto_extract)
         
         if speed_limit > 0:
             task.set_speed_limit(speed_limit)
