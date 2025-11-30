@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { addDownload, checkFileExists, fetchSettings } from "@/lib/api";
 import { Plus, X, AlertTriangle } from "lucide-react";
 import { sliderToSpeed, speedToSlider } from "@/lib/utils";
+import { useDownloads } from "@/lib/download-context";
 
 export default function AddDownloadModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -38,6 +39,8 @@ export default function AddDownloadModal() {
     return () => clearTimeout(timeout);
   }, [filename]);
 
+  const { refreshTasks } = useDownloads();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
@@ -49,6 +52,7 @@ export default function AddDownloadModal() {
         speedLimit,
         maxConnections
       );
+      await refreshTasks();
       setIsOpen(false);
       setUrl("");
       setFilename("");

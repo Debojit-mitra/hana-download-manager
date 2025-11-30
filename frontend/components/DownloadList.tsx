@@ -45,7 +45,7 @@ function getFileIcon(filename: string) {
 }
 
 export default function DownloadList() {
-  const { tasks } = useDownloads();
+  const { tasks, refreshTasks } = useDownloads();
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
     taskId: string;
@@ -149,14 +149,20 @@ export default function DownloadList() {
               )}
               {task.status === "downloading" ? (
                 <button
-                  onClick={() => pauseDownload(task.id)}
+                  onClick={async () => {
+                    await pauseDownload(task.id);
+                    await refreshTasks();
+                  }}
                   className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full text-neutral-600 dark:text-neutral-400"
                 >
                   <Pause size={18} />
                 </button>
               ) : task.status !== "completed" ? (
                 <button
-                  onClick={() => resumeDownload(task.id)}
+                  onClick={async () => {
+                    await resumeDownload(task.id);
+                    await refreshTasks();
+                  }}
                   className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full text-neutral-600 dark:text-neutral-400"
                 >
                   <Play size={18} />
@@ -291,6 +297,7 @@ export default function DownloadList() {
         isCompleted={deleteModal.isCompleted}
         onConfirm={async (deleteFile) => {
           await cancelDownload(deleteModal.taskId, deleteFile);
+          await refreshTasks();
           setDeleteModal({ ...deleteModal, isOpen: false });
         }}
       />
@@ -346,6 +353,7 @@ export default function DownloadList() {
                     limitModal.taskId,
                     limitModal.currentLimit
                   );
+                  await refreshTasks();
                   setLimitModal({ ...limitModal, isOpen: false });
                 }}
                 className="px-4 py-2 text-sm bg-pink-600 text-white rounded-lg hover:bg-pink-700"
