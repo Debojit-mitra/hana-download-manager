@@ -325,7 +325,7 @@ export default function DownloadList() {
                 }}
               />
             </div>
-            <div className="flex items-center justify-between text-xs mt-4 md:mt-2">
+            <div className="flex flex-col md:flex-row md:items-center justify-between text-xs mt-4 md:mt-2 gap-2 md:gap-0">
               <span
                 className={cn(
                   "capitalize font-medium flex items-center gap-1",
@@ -345,7 +345,7 @@ export default function DownloadList() {
                 )}
                 {task.status}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
                 <div className="flex md:hidden items-center gap-1">
                   {renderActionButtons(task, true)}
                 </div>
@@ -353,7 +353,7 @@ export default function DownloadList() {
                   {task.auto_extract && (
                     <span
                       className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium border",
+                        "text-[10px] md:text-[11px] px-1.5 py-0.5 rounded-full font-medium border",
                         task.status === "completed"
                           ? task.extraction_skipped
                             ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800"
@@ -372,7 +372,7 @@ export default function DownloadList() {
                     task.status === "paused") && (
                     <span
                       className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium border",
+                        "text-[10px] md:text-[11px] px-1.5 py-0.5 rounded-full font-medium border",
                         task.supports_resume
                           ? "bg-green-100 text-green-600 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800"
                           : "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
