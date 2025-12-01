@@ -17,15 +17,26 @@ class CloneRequest(BaseModel):
     speed_limit: int = 0
     max_connections: Optional[int] = None
 
+class VerifyRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
 @router.get("/drive/auth")
-async def drive_auth():
+async def drive_auth(redirect_uri: str = 'http://localhost:8080/'):
     """
     Initiates the Google Drive authentication flow.
-    In a real web app, this would redirect the user.
-    For now, it relies on the local console flow or existing token.
+    Returns the auth URL for the user to visit.
     """
     try:
-        drive_manager.authenticate()
+        url = drive_manager.get_auth_url(redirect_uri=redirect_uri)
+        return {"status": "auth_url", "auth_url": url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/drive/verify")
+async def drive_verify(request: VerifyRequest):
+    try:
+        drive_manager.verify_code(request.code, redirect_uri=request.redirect_uri)
         return {"status": "authenticated"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -51,17 +51,36 @@ class DriveManager:
                     print("credentials.json not found.")
                     return
 
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.credentials_path, SCOPES)
-                # Use a fixed port to match the redirect URI in Google Cloud Console
-                # Common defaults are 8080, 8000, or 3000. 
-                # Trying 8080 as it's a very common default for these flows.
-                self.creds = flow.run_local_server(port=8080)
-            
-            # Save the credentials for the next run
-            with open(self.token_path, 'wb') as token:
-                pickle.dump(self.creds, token)
+                # We cannot use run_local_server in headless/docker env easily.
+                # We will rely on the API to trigger auth flow (get_auth_url -> verify_code).
+                # This method just checks/refreshes.
+                pass
+        
+        if self.creds and self.creds.valid:
+            self.service = build('drive', 'v3', credentials=self.creds)
 
+    def get_auth_url(self, redirect_uri: str = 'http://localhost:8080/'):
+        if not os.path.exists(self.credentials_path):
+            raise Exception("credentials.json not found")
+            
+        self.flow = InstalledAppFlow.from_client_secrets_file(
+            self.credentials_path, SCOPES, redirect_uri=redirect_uri)
+        
+        auth_url, _ = self.flow.authorization_url(prompt='consent')
+        return auth_url
+
+    def verify_code(self, code: str, redirect_uri: str = 'http://localhost:8080/'):
+        if not hasattr(self, 'flow') or not self.flow or self.flow.redirect_uri != redirect_uri:
+             self.flow = InstalledAppFlow.from_client_secrets_file(
+                self.credentials_path, SCOPES, redirect_uri=redirect_uri)
+        
+        self.flow.fetch_token(code=code)
+        self.creds = self.flow.credentials
+        
+        # Save the credentials
+        with open(self.token_path, 'wb') as token:
+            pickle.dump(self.creds, token)
+            
         self.service = build('drive', 'v3', credentials=self.creds)
 
     def is_authenticated(self) -> bool:

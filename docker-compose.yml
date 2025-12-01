@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   backend:
@@ -17,6 +17,7 @@ services:
       context: ./frontend
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:8000/api # change this to your backend url
+        - NEXT_PUBLIC_OAUTH_REDIRECT_URI=http://localhost:3000/settings # change this to your frontend url for oauth redirect
     ports:
       - "3000:3000"
     depends_on:

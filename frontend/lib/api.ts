@@ -142,9 +142,35 @@ export async function getDriveStatus(): Promise<{
   return res.json();
 }
 
-export async function initiateDriveAuth(): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE_URL}/drive/auth`);
+export async function initiateDriveAuth(redirectUri?: string): Promise<{
+  status: string;
+  auth_url?: string;
+}> {
+  const url = new URL(`${API_BASE_URL}/drive/auth`);
+  if (redirectUri) {
+    url.searchParams.append("redirect_uri", redirectUri);
+  }
+  const res = await fetch(url.toString());
   if (!res.ok) throw new Error("Failed to initiate drive auth");
+  return res.json();
+}
+
+export async function verifyDriveAuth(
+  code: string,
+  redirectUri?: string
+): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE_URL}/drive/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      code,
+      redirect_uri: redirectUri || "http://localhost:8080/",
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.detail || "Failed to verify code");
+  }
   return res.json();
 }
 
