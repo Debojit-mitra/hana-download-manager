@@ -47,7 +47,7 @@ class RateLimiter:
                 await asyncio.sleep(wait_time)
 
 class DownloadTask:
-    def __init__(self, url: str, filename: str, download_dir: str, num_connections: int = 4, auto_extract: bool = False):
+    def __init__(self, url: str, filename: str, download_dir: str, num_connections: int = 4, auto_extract: bool = False, headers: Dict[str, str] = None):
         self.id = str(int(time.time() * 1000))  # Simple ID generation
         self.url = url
         self.filename = filename
@@ -58,12 +58,9 @@ class DownloadTask:
         self.status = TaskStatus.PENDING
         self.total_size = 0
         self.downloaded_size = 0
-        self.speed = 0
-        self.error_message = None
         self.parts_info = []  # List of (start, end, current)
         self.speed = 0
         self.error_message = None
-        self.parts_info = []  # List of (start, end, current)
         self.rate_limiter = None
         self.speed_limit = 0 # kbps
         self.extraction_skipped = False
@@ -71,17 +68,25 @@ class DownloadTask:
         self._cancel_event = asyncio.Event()
         self._pause_event = asyncio.Event()
         self._pause_event.set() # Start unpaused
-        self._pause_event = asyncio.Event()
-        self._pause_event.set() # Start unpaused
+        self.headers = headers or {}
+        self.completed_at = 0 # Timestamp when completed
         
         # Hidden parts directory
         self.parts_dir = os.path.join(download_dir, ".parts")
+        
+        # Ensure parts directory structure exists for nested files
+        if os.path.dirname(filename):
+            self.parts_dir = os.path.join(self.parts_dir, os.path.dirname(filename))
+            
         if not os.path.exists(self.parts_dir):
             os.makedirs(self.parts_dir)
             
-        self.state_file = os.path.join(self.parts_dir, f"{filename}.state.json")
-        self.task_runner: Optional[asyncio.Task] = None
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.state_file = os.path.join(self.parts_dir, f"{os.path.basename(filename)}.state.json")
+        
+        # Ensure destination directory exists
+        dest_dir = os.path.dirname(self.filepath)
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
         self.task_runner: Optional[asyncio.Task] = None
         self.session: Optional[aiohttp.ClientSession] = None
 
@@ -121,14 +126,13 @@ class DownloadTask:
             "downloaded_size": self.downloaded_size,
             "status": self.status,
             "parts_info": self.parts_info,
-            "status": self.status,
-            "parts_info": self.parts_info,
-            "auto_extract": self.auto_extract,
             "auto_extract": self.auto_extract,
             "speed_limit": self.speed_limit,
             "extraction_skipped": self.extraction_skipped,
             "supports_resume": self.supports_resume,
-            "num_connections": self.num_connections
+            "num_connections": self.num_connections,
+            "headers": self.headers,
+            "completed_at": self.completed_at
         }
         with open(self.state_file, 'w') as f:
             json.dump(state, f)
@@ -141,19 +145,19 @@ class DownloadTask:
                 self.total_size = state.get("total_size", 0)
                 self.downloaded_size = state.get("downloaded_size", 0)
                 self.parts_info = state.get("parts_info", [])
-                self.parts_info = state.get("parts_info", [])
-                self.auto_extract = state.get("auto_extract", False)
                 self.auto_extract = state.get("auto_extract", False)
                 self.speed_limit = state.get("speed_limit", 0)
                 self.extraction_skipped = state.get("extraction_skipped", False)
                 self.supports_resume = state.get("supports_resume", False)
                 self.status = state.get("status", TaskStatus.PENDING)
                 self.num_connections = state.get("num_connections", self.num_connections)
+                self.headers = state.get("headers", {})
+                self.completed_at = state.get("completed_at", 0)
                 return True
         return False
 
     async def get_file_info(self):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.head(self.url) as response:
                 if response.status == 200:
                     self.total_size = int(response.headers.get('Content-Length', 0))
@@ -167,7 +171,7 @@ class DownloadTask:
     async def download_part(self, session, part_id, start, end, current_pos):
         retries = 0
         max_retries = 5
-        part_file = os.path.join(self.parts_dir, f"{self.filename}.part{part_id}")
+        part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{part_id}")
         
         while retries < max_retries:
             try:
@@ -183,6 +187,7 @@ class DownloadTask:
                     range_header += str(end)
                 # If end is None, we send 'bytes=current_pos-', asking for everything from current_pos to the end.
                 headers = {'Range': range_header}
+                headers.update(self.headers)
                 
                 async with session.get(self.url, headers=headers) as response:
                     # If we requested a range but got 200 OK, it means the server ignored the range.
@@ -296,7 +301,7 @@ class DownloadTask:
                      self.downloaded_size = 0
                      # We should probably delete old parts too to avoid corruption
                      for i in range(self.num_connections):
-                        part_file = os.path.join(self.parts_dir, f"{self.filename}.part{i}")
+                        part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{i}")
                         if os.path.exists(part_file):
                             os.remove(part_file)
                      
@@ -308,13 +313,12 @@ class DownloadTask:
                         end = (i + 1) * part_size - 1 if i < self.num_connections - 1 else self.total_size - 1
                         self.parts_info.append({'start': start, 'end': end, 'current': start})
 
-        self.session = aiohttp.ClientSession()
+        self.session = aiohttp.ClientSession(headers=self.headers)
         try:
-            self.active_tasks = []
             self.active_tasks = []
             for i, part in enumerate(self.parts_info):
                 # Sync part info with actual file size on disk to prevent corruption
-                part_file = os.path.join(self.parts_dir, f"{self.filename}.part{i}")
+                part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{i}")
                 if os.path.exists(part_file):
                     actual_size = os.path.getsize(part_file)
                     expected_size = part['current'] - part['start']
@@ -352,6 +356,7 @@ class DownloadTask:
             self.status = TaskStatus.COMPLETED
             
             if self.status == TaskStatus.COMPLETED:
+                self.completed_at = time.time()
                 self.save_state() # Ensure final state is saved (completed status)
 
     async def extract(self):
@@ -377,11 +382,12 @@ class DownloadTask:
             self.status = TaskStatus.ERROR
         else:
             self.status = TaskStatus.COMPLETED
+            self.completed_at = time.time()
 
     async def merge_parts(self):
         async with aiofiles.open(self.filepath, 'wb') as outfile:
             for i in range(self.num_connections):
-                part_file = os.path.join(self.parts_dir, f"{self.filename}.part{i}")
+                part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{i}")
                 if os.path.exists(part_file):
                     async with aiofiles.open(part_file, 'rb') as infile:
                         while True:
@@ -422,7 +428,7 @@ class DownloadTask:
                 os.remove(self.state_file)
             # Remove parts if any
             for i in range(self.num_connections):
-                part_file = os.path.join(self.parts_dir, f"{self.filename}.part{i}")
+                part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{i}")
                 if os.path.exists(part_file):
                     os.remove(part_file)
         except Exception as e:
@@ -446,6 +452,29 @@ class DownloadManager:
                     with open(filepath, 'r') as f:
                         state = json.load(f)
                     
+                    # Check if it's a folder task
+                    if state.get("type") == "folder":
+                        # Import here to avoid circular dependency if possible, or move import to top if safe
+                        from .drive_task import DriveFolderTask
+                        
+                        folder_id = state.get("folder_id")
+                        name = state.get("name")
+                        if not folder_id or not name:
+                            continue
+                            
+                        task = DriveFolderTask(
+                            folder_id, 
+                            name, 
+                            settings.download_dir, 
+                            settings.max_connections_per_task
+                        )
+                        if task.load_state():
+                             # If task was downloading, set to PAUSED
+                            if task.status == TaskStatus.DOWNLOADING:
+                                task.status = TaskStatus.PAUSED
+                            self.tasks[task.id] = task
+                        continue
+
                     # Reconstruct task
                     url = state.get("url", "")
                     fname = state.get("filename", "")
@@ -479,7 +508,7 @@ class DownloadManager:
                 return new_filename
             counter += 1
 
-    async def add_task(self, url: str, filename: str = None, auto_extract: bool = False, speed_limit: int = 0, max_connections: int = None):
+    async def add_task(self, url: str, filename: str = None, auto_extract: bool = False, speed_limit: int = 0, max_connections: int = None, headers: Dict[str, str] = None):
         if not filename:
             filename = url.split('/')[-1] or "downloaded_file"
         
@@ -490,7 +519,7 @@ class DownloadManager:
         # Use provided max_connections or fallback to settings
         connections = max_connections if max_connections and max_connections > 0 else settings.max_connections_per_task
         
-        task = DownloadTask(url, filename, settings.download_dir, connections, auto_extract)
+        task = DownloadTask(url, filename, settings.download_dir, connections, auto_extract, headers=headers)
         
         if speed_limit > 0:
             task.set_speed_limit(speed_limit)
@@ -498,6 +527,29 @@ class DownloadManager:
         self.tasks[task.id] = task
         
         task.save_state() # Save initial state
+        
+        await self.process_queue()
+        return task.id
+
+    async def add_drive_folder_task(self, folder_id: str, name: str, auto_extract: bool = False, speed_limit: int = 0, max_connections: int = None):
+        from .drive_task import DriveFolderTask
+        settings = settings_manager.settings
+        
+        # Auto-rename if exists
+        name = self.get_unique_filename(name)
+        
+        connections = max_connections if max_connections and max_connections > 0 else settings.max_connections_per_task
+
+        task = DriveFolderTask(
+            folder_id, 
+            name, 
+            settings.download_dir, 
+            connections,
+            auto_extract=auto_extract,
+            speed_limit=speed_limit
+        )
+        self.tasks[task.id] = task
+        task.save_state()
         
         await self.process_queue()
         return task.id
@@ -547,28 +599,50 @@ class DownloadManager:
 
     def organize_file(self, task: DownloadTask):
         try:
-            ext = os.path.splitext(task.filename)[1].lower()
-            category = "Others"
-            if ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
-                category = "Images"
-            elif ext in ['.mp4', '.mkv', '.avi', '.mov']:
-                category = "Videos"
-            elif ext in ['.mp3', '.wav', '.flac']:
-                category = "Music"
-            elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz']:
-                category = "Archives"
-            elif ext in ['.exe', '.msi', '.deb', '.rpm']:
-                category = "Programs"
-            elif ext in ['.pdf', '.doc', '.docx', '.txt']:
-                category = "Documents"
+            # Check for Drive Folder Task
+            # We can check for folder_id attribute or type name in state
+            if hasattr(task, 'folder_id'):
+                 category = "Gdrive Folders"
+            else:
+                ext = os.path.splitext(task.filename)[1].lower()
+                category = "Others"
+                if ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                    category = "Images"
+                elif ext in ['.mp4', '.mkv', '.avi', '.mov']:
+                    category = "Videos"
+                elif ext in ['.mp3', '.wav', '.flac']:
+                    category = "Music"
+                elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz']:
+                    category = "Archives"
+                elif ext in ['.exe', '.msi', '.deb', '.rpm']:
+                    category = "Programs"
+                elif ext in ['.pdf', '.doc', '.docx', '.txt']:
+                    category = "Documents"
 
             target_dir = os.path.join(task.download_dir, category)
             if not os.path.exists(target_dir):
                 os.makedirs(target_dir)
             
             new_path = os.path.join(target_dir, task.filename)
-            shutil.move(task.filepath, new_path)
-            task.filepath = new_path # Update path
+            
+            # If it's a folder task, task.filepath is a directory
+            # If it's a file task, task.filepath is a file
+            
+            if os.path.exists(task.filepath):
+                # Check if we are trying to move to the same location
+                if os.path.abspath(task.filepath) == os.path.abspath(new_path):
+                    return
+
+                shutil.move(task.filepath, new_path)
+                task.filepath = new_path # Update path
+                
+                # If it's a folder task, we might need to update sub-tasks paths?
+                # But sub-tasks are done. And their paths are relative to the folder.
+                # If we move the folder, the relative structure inside is preserved.
+                # However, if we try to access sub-tasks later via their absolute path, it will fail.
+                # But we don't really access them after completion except for deletion?
+                # DriveFolderTask.delete_files() uses self.filepath. So it's fine.
+                
         except Exception as e:
             print(f"Error organizing file: {e}")
 
@@ -606,15 +680,21 @@ class DownloadManager:
             
             # 1. Rename State File
             old_state_file = task.state_file
-            new_state_file = os.path.join(task.parts_dir, f"{new_filename}.state.json")
+            # Note: This logic needs to be careful about paths. 
+            # For now assuming rename doesn't change directory structure of the task, just the filename.
+            # But if filename includes path, this is complex.
+            # Simplified: assuming rename is only for the basename.
+            
+            new_basename = os.path.basename(new_filename)
+            new_state_file = os.path.join(task.parts_dir, f"{new_basename}.state.json")
             if os.path.exists(old_state_file):
                 os.rename(old_state_file, new_state_file)
             task.state_file = new_state_file
 
             # 2. Rename Parts
             for i in range(task.num_connections):
-                old_part = os.path.join(task.parts_dir, f"{old_filename}.part{i}")
-                new_part = os.path.join(task.parts_dir, f"{new_filename}.part{i}")
+                old_part = os.path.join(task.parts_dir, f"{os.path.basename(old_filename)}.part{i}")
+                new_part = os.path.join(task.parts_dir, f"{os.path.basename(new_filename)}.part{i}")
                 if os.path.exists(old_part):
                     os.rename(old_part, new_part)
 

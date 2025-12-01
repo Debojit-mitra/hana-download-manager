@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { Settings, fetchSettings, updateSettings } from "@/lib/api";
-import { Save, Folder, Github, Info, Heart } from "lucide-react";
+import { Save, Folder, Github, Info, Heart, Cloud } from "lucide-react";
+import { DriveAuth } from "@/components/DriveAuth";
 import pkg from "@/package.json";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({
     download_dir: "downloads",
     max_concurrent_downloads: 3,
-    max_connections_per_task: 6,
+    max_connections_per_task: 4,
     organize_files: true,
   });
   const [loading, setLoading] = useState(true);
@@ -29,7 +30,7 @@ export default function SettingsPage() {
       const validSettings = {
         ...settings,
         max_concurrent_downloads: settings.max_concurrent_downloads || 3,
-        max_connections_per_task: settings.max_connections_per_task || 6,
+        max_connections_per_task: settings.max_connections_per_task || 4,
       };
       await updateSettings(validSettings);
       // Update local state with values if they were invalid
@@ -144,6 +145,24 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
               />
             </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Cloud size={20} />
+            Integrations
+          </h2>
+          <div className="flex flex-col justify-between gap-2">
+            <div>
+              <h3 className="font-medium text-neutral-900 dark:text-neutral-100">
+                Google Drive
+              </h3>
+              <p className="text-sm text-neutral-500">
+                Connect your Google Drive account to download files directly.
+              </p>
+            </div>
+            <DriveAuth />
           </div>
         </div>
 

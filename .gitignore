@@ -17,6 +17,8 @@ backend/.parts/
 backend/*.db
 backend/state/
 backend/settings.json
+backend/token.pickle
+backend/credentials.json
 
 # Node / Frontend
 node_modules/

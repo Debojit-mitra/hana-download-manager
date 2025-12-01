@@ -46,7 +46,9 @@ async def list_downloads():
             "auto_extract": t.auto_extract,
             "extraction_skipped": t.extraction_skipped,
             "supports_resume": t.supports_resume,
-            "error_message": t.error_message
+            "supports_resume": t.supports_resume,
+            "error_message": t.error_message,
+            "completed_at": getattr(t, 'completed_at', 0)
         }
         for t in tasks
     ]

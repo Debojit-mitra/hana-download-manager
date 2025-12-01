@@ -22,6 +22,7 @@ export interface DownloadTask {
   extraction_skipped: boolean;
   supports_resume: boolean;
   error_message?: string;
+  completed_at?: number;
 }
 
 export async function fetchDownloads(): Promise<DownloadTask[]> {
@@ -125,5 +126,78 @@ export async function updateSettings(settings: Settings): Promise<Settings> {
     body: JSON.stringify(settings),
   });
   if (!res.ok) throw new Error("Failed to update settings");
+  return res.json();
+}
+
+/// ====================================
+/// ========= Google Drive API =========
+/// ====================================
+
+export async function getDriveStatus(): Promise<{
+  is_authenticated: boolean;
+  has_credentials: boolean;
+}> {
+  const res = await fetch(`${API_BASE_URL}/drive/status`);
+  if (!res.ok) throw new Error("Failed to fetch drive status");
+  return res.json();
+}
+
+export async function initiateDriveAuth(): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE_URL}/drive/auth`);
+  if (!res.ok) throw new Error("Failed to initiate drive auth");
+  return res.json();
+}
+
+export async function uploadDriveCredentials(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE_URL}/drive/credentials`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.detail || "Failed to upload credentials");
+  }
+  return res.json();
+}
+
+export async function getDriveFileMetadata(
+  fileId: string
+): Promise<{ id: string; name: string; mimeType: string; size?: string }> {
+  const res = await fetch(
+    `${API_BASE_URL}/drive/metadata?file_id=${encodeURIComponent(fileId)}`
+  );
+  if (!res.ok) throw new Error("Failed to fetch drive file metadata");
+  return res.json();
+}
+
+export async function cloneDriveFile(
+  fileId: string,
+  name: string,
+  mimeType: string,
+  autoExtract: boolean = false,
+  speedLimit: number = 0,
+  maxConnections: number = 0
+) {
+  const res = await fetch(`${API_BASE_URL}/drive/clone`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      file_id: fileId,
+      name,
+      mime_type: mimeType,
+      auto_extract: autoExtract,
+      speed_limit: speedLimit,
+      max_connections: maxConnections > 0 ? maxConnections : undefined,
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.detail || "Failed to clone drive file");
+  }
   return res.json();
 }

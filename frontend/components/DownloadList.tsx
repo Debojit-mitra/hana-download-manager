@@ -49,6 +49,28 @@ function getFileIcon(filename: string) {
   return <File size={20} />;
 }
 
+function formatCompletionTime(timestamp: number) {
+  const date = new Date(timestamp * 1000);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const isYesterday =
+    new Date(now.setDate(now.getDate() - 1)).toDateString() ===
+    date.toDateString();
+
+  const timeStr = date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (isToday) return `Today, ${timeStr}`;
+  if (isYesterday) return `Yesterday, ${timeStr}`;
+
+  return `${date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  })}, ${timeStr}`;
+}
+
 export default function DownloadList() {
   const { tasks, refreshTasks } = useDownloads();
   const [deleteModal, setDeleteModal] = useState<{
@@ -183,10 +205,20 @@ export default function DownloadList() {
     );
   };
 
-  const filteredTasks = tasks.filter((t) => {
-    if (activeTab === "active") return t.status !== "completed";
-    return t.status === "completed";
-  });
+  const filteredTasks = tasks
+    .filter((t) => {
+      if (activeTab === "active") return t.status !== "completed";
+      return t.status === "completed";
+    })
+    .sort((a, b) => {
+      if (activeTab === "completed") {
+        // Sort by completion time (newest first)
+        // If completed_at is missing (old tasks), treat as 0 (oldest)
+        return (b.completed_at || 0) - (a.completed_at || 0);
+      }
+      // For active tasks, keep default order (or maybe creation time if we had it)
+      return 0;
+    });
 
   return (
     <div className="w-full space-y-4">
@@ -343,7 +375,9 @@ export default function DownloadList() {
                 {task.status === "extracting" && (
                   <Loader2 size={12} className="animate-spin" />
                 )}
-                {task.status}
+                {task.status === "completed" && task.completed_at
+                  ? `Completed ${formatCompletionTime(task.completed_at)}`
+                  : task.status}
               </span>
               <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
                 <div className="flex md:hidden items-center gap-1">

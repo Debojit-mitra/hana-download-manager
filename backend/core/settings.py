@@ -5,7 +5,7 @@ import os
 class Settings(BaseModel):
     download_dir: str = os.path.join(os.path.expanduser("~"), "Downloads", "HDM")
     max_concurrent_downloads: int = 3
-    max_connections_per_task: int = 6
+    max_connections_per_task: int = 4
     organize_files: bool = True
 
 class SettingsManager:
