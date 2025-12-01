@@ -2,7 +2,9 @@
 
 A modern, high-performance download manager built with **Next.js** (Frontend) and **FastAPI** (Backend).
 
-![Hana Download Manager](/frontend/public/images/hdm.webp)
+<p align="center">
+<img src="https://i.ibb.co/kstj1x9S/hdm.webp" alt="Hana Download Manager" width="300" >
+</p>
 
 ## Features
 
@@ -25,12 +27,14 @@ A modern, high-performance download manager built with **Next.js** (Frontend) an
 The easiest way to run Hana Download Manager is with Docker.
 
 1.  **Clone the repository**:
+
     ```bash
     git clone https://github.com/Debojit-mitra/hana-download-manager.git
     cd hana-download-manager
     ```
 
 2.  **Run with Docker Compose**:
+
     ```bash
     docker-compose up --build
     ```
@@ -48,7 +52,7 @@ You can configure the download directory in `docker-compose.yml`:
 services:
   backend:
     volumes:
-      - /path/to/your/downloads/HDM:/app/downloads/HDM  # Map to any local folder
+      - /path/to/your/downloads/HDM:/app/downloads/HDM # Map to any local folder
     environment:
       - DOWNLOAD_DIR=/app/downloads/HDM
 ```
