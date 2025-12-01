@@ -4,3 +4,4 @@ aiohttp
 aiofiles
 pydantic
 python-multipart
+py7zr
