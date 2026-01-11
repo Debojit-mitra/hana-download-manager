@@ -34,6 +34,7 @@ import {
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import RefreshLinkModal from "./RefreshLinkModal";
 import { useDownloads } from "@/contexts/download-context";
+import { Snackbar, SnackbarType } from "./Snackbar";
 
 function getFileIcon(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -110,6 +111,15 @@ export default function DownloadList() {
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [snackbar, setSnackbar] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: SnackbarType;
+  }>({
+    isOpen: false,
+    message: "",
+    type: "info",
+  });
 
   const startEditing = (task: any) => {
     setEditingTaskId(task.id);
@@ -320,8 +330,16 @@ export default function DownloadList() {
                   </div>
                 )}
                 <p
-                  className="text-xs text-neutral-500 dark:text-neutral-400 truncate"
-                  title={task.url}
+                  className="text-xs text-neutral-500 dark:text-neutral-400 truncate cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-200"
+                  title={`${task.url} (Click to copy)`}
+                  onClick={() => {
+                    navigator.clipboard.writeText(task.url);
+                    setSnackbar({
+                      isOpen: true,
+                      message: "Link copied to clipboard",
+                      type: "success",
+                    });
+                  }}
                 >
                   {task.url}
                 </p>
@@ -525,6 +543,14 @@ export default function DownloadList() {
           </div>
         </div>
       )}
+
+      <Snackbar
+        isOpen={snackbar.isOpen}
+        message={snackbar.message}
+        type={snackbar.type}
+        position="top-right"
+        onClose={() => setSnackbar((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

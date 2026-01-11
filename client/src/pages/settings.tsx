@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Settings, fetchSettings, updateSettings } from "@/contexts/api";
 import { Save, Folder, Github, Info, Heart, Cloud } from "lucide-react";
 import { DriveAuth } from "@/components/DriveAuth";
+import { Loading } from "@/components/Loading";
 
 // Import package.json version dynamically
 const pkg = require("../../package.json");
@@ -44,8 +45,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (loading)
-    return <div className="p-8 text-center">Loading settings...</div>;
+  if (loading) return <Loading />;
 
   return (
     <>

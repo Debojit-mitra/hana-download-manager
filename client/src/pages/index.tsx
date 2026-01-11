@@ -1,7 +1,6 @@
 import Head from "next/head";
 import DownloadList from "@/components/DownloadList";
 import AddDownloadModal from "@/components/AddDownloadModal";
-import ClipboardMonitor from "@/components/ClipboardMonitor";
 
 export default function Home() {
   return (
@@ -27,7 +26,6 @@ export default function Home() {
         </main>
 
         <AddDownloadModal />
-        <ClipboardMonitor />
       </div>
     </>
   );
