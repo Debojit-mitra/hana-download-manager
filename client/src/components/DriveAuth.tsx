@@ -181,7 +181,7 @@ export function DriveAuth() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleAuth}
-            disabled={authLoading}
+            disabled={authLoading || !hasCredentials}
             className="flex items-center gap-2 w-fit px-4 py-2 text-sm hover:text-white font-medium border border-neutral-200 dark:border-neutral-800 hover:bg-pink-500 dark:hover:bg-pink-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm"
           >
             {authLoading ? (
