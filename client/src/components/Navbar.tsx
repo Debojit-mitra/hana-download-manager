@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
-export default function Header() {
+export default function Navbar() {
   const [mounted, setMounted] = useState(false);
   const pkg = require("../../package.json");
 
@@ -17,7 +17,7 @@ export default function Header() {
 
   return (
     <header className="bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 sticky top-0 z-10">
-      <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto pr-4 lg:pr-0 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center">
           {mounted ? (
             <Image

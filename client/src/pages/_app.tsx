@@ -1,7 +1,7 @@
 import type { AppProps } from "next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DownloadProvider } from "@/contexts/download-context";
-import Header from "@/components/Header";
+import Navbar from "@/components/Navbar";
 import "@/styles/globals.css";
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -13,7 +13,7 @@ export default function App({ Component, pageProps }: AppProps) {
       disableTransitionOnChange
     >
       <DownloadProvider>
-        <Header />
+        <Navbar />
         <Component {...pageProps} />
       </DownloadProvider>
     </ThemeProvider>

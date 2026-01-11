@@ -23,6 +23,39 @@ import { sliderToSpeed, speedToSlider } from "@/contexts/utils";
 import { useDownloads } from "@/contexts/download-context";
 import { useRouter } from "next/navigation";
 
+// Robust ID extraction
+function extractDriveId(url: string): string | null {
+  try {
+    // Basic check to ensure it looks like a google URL
+    if (!url.includes("google.com") && !url.includes("googleusercontent.com")) {
+      // Allow direct ID inputs if they are long enough?
+      // The user prompt said: "if we put different link it gives errors"
+      // So we should be strict about valid usage.
+      // But what if user just pastes the ID?
+      // Let's support pure IDs if they match the loose regex, BUT only if they don't look like a URL (no http/www)
+      if (!url.startsWith("http") && !url.includes(".") && !url.includes("/")) {
+        if (url.match(/^[-_\w]{25,}$/)) return url;
+      }
+      return null;
+    }
+
+    const patterns = [
+      /\/file\/d\/([-_\w]+)/,
+      /\/folders\/([-_\w]+)/,
+      /[?&]id=([-_\w]+)/,
+      /\/d\/([-_\w]+)/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) return match[1];
+    }
+  } catch (e) {
+    return null;
+  }
+  return null;
+}
+
 export default function AddDownloadModal() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -44,6 +77,7 @@ export default function AddDownloadModal() {
   const [fetchingMetadata, setFetchingMetadata] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isDriveAuth, setIsDriveAuth] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings().then((settings) => {
@@ -75,12 +109,10 @@ export default function AddDownloadModal() {
   // Auto-fetch Drive Metadata
   useEffect(() => {
     const fetchMeta = async () => {
-      if (!driveLink) return;
+      setError(null); // Clear error when link changes
+      const fileId = extractDriveId(driveLink);
+      if (!fileId) return;
 
-      const match = driveLink.match(/[-\w]{25,}/);
-      if (!match) return;
-
-      const fileId = match[0];
       setFetchingMetadata(true);
       try {
         const meta = await getDriveFileMetadata(fileId);
@@ -88,6 +120,7 @@ export default function AddDownloadModal() {
         setDriveMimeType(meta.mimeType);
       } catch (e) {
         console.error("Failed to fetch metadata", e);
+        // Don't show public error for auto-fetch, just log it, unless user tries to submit
       } finally {
         setFetchingMetadata(false);
       }
@@ -101,6 +134,7 @@ export default function AddDownloadModal() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
     if (activeTab === "url") {
       if (!url) return;
@@ -115,23 +149,22 @@ export default function AddDownloadModal() {
         await refreshTasks();
         resetForm();
       } catch (e) {
-        alert("Failed to add download");
+        setError("Failed to add download");
       }
     } else {
       // Drive Logic
       const finalName = userDriveName || fetchedDriveName;
-      if (!driveLink || !finalName) return;
+      if (!driveLink) return;
 
-      // Extract ID
-      let fileId = "";
-      // Regex for file/d/ID or folders/ID or id=ID
-      const match = driveLink.match(/[-\w]{25,}/);
-      if (match) {
-        fileId = match[0];
-      }
+      const fileId = extractDriveId(driveLink);
 
       if (!fileId) {
-        alert("Could not extract File/Folder ID from link");
+        setError("Invalid Google Drive Link");
+        return;
+      }
+
+      if (!finalName) {
+        setError("Please wait for metadata fetch or enter a name manually");
         return;
       }
 
@@ -153,7 +186,7 @@ export default function AddDownloadModal() {
         await refreshTasks();
         resetForm();
       } catch (e) {
-        alert("Failed to clone Drive file: " + e);
+        setError("Failed to clone Drive file: " + e);
       }
     }
   };
@@ -170,6 +203,7 @@ export default function AddDownloadModal() {
     setUserDriveName("");
     setFetchedDriveName("");
     setDriveMimeType("application/octet-stream");
+    setError(null);
   };
 
   if (!isOpen) {
@@ -204,7 +238,10 @@ export default function AddDownloadModal() {
                 ? "border-pink-500 text-pink-600 dark:text-pink-400"
                 : "border-transparent text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
             }`}
-            onClick={() => setActiveTab("url")}
+            onClick={() => {
+              setActiveTab("url");
+              setError(null);
+            }}
           >
             <div className="flex items-center justify-center gap-2">
               <LinkIcon size={16} />
@@ -224,6 +261,7 @@ export default function AddDownloadModal() {
                 return;
               }
               setActiveTab("drive");
+              setError(null);
             }}
             title={!isDriveAuth ? "Click to authorize in Settings" : ""}
           >
@@ -250,7 +288,10 @@ export default function AddDownloadModal() {
                   type="url"
                   required
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => {
+                    setUrl(e.target.value);
+                    setError(null);
+                  }}
                   className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   placeholder="https://example.com/file.zip"
                 />
@@ -288,7 +329,10 @@ export default function AddDownloadModal() {
                   type="text"
                   required
                   value={driveLink}
-                  onChange={(e) => setDriveLink(e.target.value)}
+                  onChange={(e) => {
+                    setDriveLink(e.target.value);
+                    setError(null);
+                  }}
                   className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   placeholder="https://drive.google.com/..."
                 />
@@ -431,6 +475,13 @@ export default function AddDownloadModal() {
               </div>
             )}
           </div>
+
+          {error && (
+            <div className="text-red-500 text-sm bg-red-50 dark:bg-red-900/10 p-2 rounded-lg flex items-center gap-2">
+              <AlertTriangle size={14} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
           <div className="pt-2 flex justify-end gap-2">
             <button
