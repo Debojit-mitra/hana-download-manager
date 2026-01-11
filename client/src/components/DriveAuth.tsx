@@ -6,7 +6,7 @@ import {
   initiateDriveAuth,
   uploadDriveCredentials,
   verifyDriveAuth,
-} from "@/lib/api";
+} from "@/contexts/api";
 import { Loader2, CheckCircle2, RefreshCw, Upload } from "lucide-react";
 import Image from "next/image";
 import { Snackbar, SnackbarType } from "./Snackbar";

@@ -1,6 +1,6 @@
 import type { AppProps } from "next/app";
 import { ThemeProvider } from "@/components/theme-provider";
-import { DownloadProvider } from "@/lib/download-context";
+import { DownloadProvider } from "@/contexts/download-context";
 import Header from "@/components/Header";
 import "@/styles/globals.css";
 

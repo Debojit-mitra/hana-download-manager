@@ -7,8 +7,13 @@ import {
   cancelDownload,
   setSpeedLimit,
   renameDownload,
-} from "@/lib/api";
-import { formatBytes, cn, sliderToSpeed, speedToSlider } from "@/lib/utils";
+} from "@/contexts/api";
+import {
+  formatBytes,
+  cn,
+  sliderToSpeed,
+  speedToSlider,
+} from "@/contexts/utils";
 import {
   Play,
   Pause,
@@ -28,7 +33,7 @@ import {
 } from "lucide-react";
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import RefreshLinkModal from "./RefreshLinkModal";
-import { useDownloads } from "@/lib/download-context";
+import { useDownloads } from "@/contexts/download-context";
 
 function getFileIcon(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase();

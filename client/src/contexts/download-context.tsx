@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { DownloadTask, fetchDownloads } from "@/lib/api";
+import { DownloadTask, fetchDownloads } from "@/contexts/api";
 
 interface DownloadContextType {
   tasks: DownloadTask[];

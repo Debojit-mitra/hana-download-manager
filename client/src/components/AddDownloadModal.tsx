@@ -8,7 +8,7 @@ import {
   cloneDriveFile,
   getDriveFileMetadata,
   getDriveStatus,
-} from "@/lib/api";
+} from "@/contexts/api";
 import {
   Plus,
   X,
@@ -19,8 +19,8 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { sliderToSpeed, speedToSlider } from "@/lib/utils";
-import { useDownloads } from "@/lib/download-context";
+import { sliderToSpeed, speedToSlider } from "@/contexts/utils";
+import { useDownloads } from "@/contexts/download-context";
 import { useRouter } from "next/navigation";
 
 export default function AddDownloadModal() {

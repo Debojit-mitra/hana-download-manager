@@ -1,6 +1,6 @@
 import Head from "next/head";
 import { useState, useEffect } from "react";
-import { Settings, fetchSettings, updateSettings } from "@/lib/api";
+import { Settings, fetchSettings, updateSettings } from "@/contexts/api";
 import { Save, Folder, Github, Info, Heart, Cloud } from "lucide-react";
 import { DriveAuth } from "@/components/DriveAuth";
 

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { refreshDownloadLink } from "@/lib/api";
+import { refreshDownloadLink } from "@/contexts/api";
 import { X, RefreshCw } from "lucide-react";
-import { useDownloads } from "@/lib/download-context";
+import { useDownloads } from "@/contexts/download-context";
 
 interface RefreshLinkModalProps {
   isOpen: boolean;
