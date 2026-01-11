@@ -8,6 +8,13 @@ from enum import Enum
 import time
 import shutil
 from .settings import settings_manager
+import functools
+
+print = functools.partial(print, flush=True)
+
+class RangeIgnoredError(Exception):
+    """Raised when server ignores Range header and returns 200 OK instead of 206."""
+    pass
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -200,7 +207,7 @@ class DownloadTask:
                             # We are trying to resume or download a part, but server sent the whole file.
                             # This would corrupt the file by appending the whole file to a part.
                             print("Server does not support resuming/ranges (returned 200 OK instead of 206 Partial Content)")
-                            raise Exception("Server does not support resuming/ranges")
+                            raise RangeIgnoredError("Server does not support resuming/ranges")
 
                     if response.status in [200, 206]:
                         async with aiofiles.open(part_file, 'ab') as f:
@@ -248,6 +255,9 @@ class DownloadTask:
                 # Wait before retrying (exponential backoff)
                 await asyncio.sleep(1 * retries)
             
+            except RangeIgnoredError:
+                raise # Re-raise to be handled in start()
+            
             except Exception as e:
                 # Non-recoverable error
                 print(f"Critical error in part {part_id}: {e}")
@@ -264,92 +274,129 @@ class DownloadTask:
     async def start(self):
         self.status = TaskStatus.DOWNLOADING
         await self.get_file_info()
-        
-        if not self.parts_info:
-            if self.total_size == 0:
-                # If the file size is unknown, use a single connection.
-                # We can't split ranges without knowing the size.
-                # Setting end=None makes the request "open-ended" (bytes=0-),
-                # ensuring we download the whole file safely.
-                self.num_connections = 1
-                self.parts_info = [{'start': 0, 'end': None, 'current': 0}]
-            else:
-                # Calculate parts
-                part_size = self.total_size // self.num_connections
-                self.parts_info = []
-                for i in range(self.num_connections):
-                    start = i * part_size
-                    end = (i + 1) * part_size - 1 if i < self.num_connections - 1 else self.total_size - 1
-                    self.parts_info.append({'start': start, 'end': end, 'current': start})
-        else:
-            # Validate existing parts against current file info
-            if self.total_size > 0:
-                expected_total = sum(p['end'] - p['start'] + 1 for p in self.parts_info[:-1]) + (self.parts_info[-1]['end'] - self.parts_info[-1]['start'] + 1)
-                # Check if the file size is still the same.
-                # If the server now reports a different total_size,
-                # the existing part files may no longer match.
-                # Since our previous total_size was overwritten,
-                # the easiest consistency check is to see whether
-                # the last part ends at new_total_size - 1.
-                # If not, we should reset and start fresh.
-                
-                last_part_end = self.parts_info[-1]['end']
-                if last_part_end != self.total_size - 1:
-                     # File size changed!
-                     print(f"File size changed from {last_part_end + 1} to {self.total_size}. Cannot resume.")
-                     self.parts_info = [] # Force recalculation
-                     self.downloaded_size = 0
-                     # We should probably delete old parts too to avoid corruption
-                     for i in range(self.num_connections):
+
+        # Wrap logic in loop to allow single restart on RangeIgnoredError
+        while True:
+            try:
+                if not self.parts_info:
+                    if self.total_size == 0:
+                        # If the file size is unknown, use a single connection.
+                        # We can't split ranges without knowing the size.
+                        # Setting end=None makes the request "open-ended" (bytes=0-),
+                        # ensuring we download the whole file safely.
+                        self.num_connections = 1
+                        self.parts_info = [{'start': 0, 'end': None, 'current': 0}]
+                    else:
+                        # Calculate parts
+                        part_size = self.total_size // self.num_connections
+                        self.parts_info = []
+                        for i in range(self.num_connections):
+                            start = i * part_size
+                            end = (i + 1) * part_size - 1 if i < self.num_connections - 1 else self.total_size - 1
+                            self.parts_info.append({'start': start, 'end': end, 'current': start})
+                else:
+                    # Validate existing parts against current file info
+                    if self.total_size > 0:
+                        expected_total = sum(p['end'] - p['start'] + 1 for p in self.parts_info[:-1]) + (self.parts_info[-1]['end'] - self.parts_info[-1]['start'] + 1)
+                        # Check if the file size is still the same.
+                        # If the server now reports a different total_size,
+                        # the existing part files may no longer match.
+                        # Since our previous total_size was overwritten,
+                        # the easiest consistency check is to see whether
+                        # the last part ends at new_total_size - 1.
+                        # If not, we should reset and start fresh.
+                        
+                        last_part_end = self.parts_info[-1]['end']
+                        if last_part_end != self.total_size - 1:
+                             # File size changed!
+                             print(f"File size changed from {last_part_end + 1} to {self.total_size}. Cannot resume.")
+                             self.parts_info = [] # Force recalculation
+                             self.downloaded_size = 0
+                             # We should probably delete old parts too to avoid corruption
+                             for i in range(self.num_connections):
+                                part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{i}")
+                                if os.path.exists(part_file):
+                                    os.remove(part_file)
+                             
+                             # Recalculate parts immediately
+                             part_size = self.total_size // self.num_connections
+                             self.parts_info = []
+                             for i in range(self.num_connections):
+                                start = i * part_size
+                                end = (i + 1) * part_size - 1 if i < self.num_connections - 1 else self.total_size - 1
+                                self.parts_info.append({'start': start, 'end': end, 'current': start})
+
+                self.session = aiohttp.ClientSession(headers=self.headers)
+                try:
+                    self.active_tasks = []
+                    for i, part in enumerate(self.parts_info):
+                        # Sync part info with actual file size on disk to prevent corruption
                         part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{i}")
                         if os.path.exists(part_file):
-                            os.remove(part_file)
-                     
-                     # Recalculate parts immediately
-                     part_size = self.total_size // self.num_connections
-                     self.parts_info = []
-                     for i in range(self.num_connections):
-                        start = i * part_size
-                        end = (i + 1) * part_size - 1 if i < self.num_connections - 1 else self.total_size - 1
-                        self.parts_info.append({'start': start, 'end': end, 'current': start})
-
-        self.session = aiohttp.ClientSession(headers=self.headers)
-        try:
-            self.active_tasks = []
-            for i, part in enumerate(self.parts_info):
-                # Sync part info with actual file size on disk to prevent corruption
-                part_file = os.path.join(self.parts_dir, f"{os.path.basename(self.filename)}.part{i}")
-                if os.path.exists(part_file):
-                    actual_size = os.path.getsize(part_file)
-                    expected_size = part['current'] - part['start']
+                            actual_size = os.path.getsize(part_file)
+                            expected_size = part['current'] - part['start']
+                            
+                            if actual_size != expected_size:
+                                # Trust the file on disk. If we downloaded more/less than state says,
+                                # we should resume from where the file actually ends.
+                                part['current'] = part['start'] + actual_size
+                                
+                        t = asyncio.create_task(self.download_part(self.session, i, part['start'], part['end'], part['current']))
+                        self.active_tasks.append(t)
                     
-                    if actual_size != expected_size:
-                        # Trust the file on disk. If we downloaded more/less than state says,
-                        # we should resume from where the file actually ends.
-                        part['current'] = part['start'] + actual_size
-                        
-                t = asyncio.create_task(self.download_part(self.session, i, part['start'], part['end'], part['current']))
-                self.active_tasks.append(t)
-            
-            # Recalculate total downloaded size based on synced parts
-            self.downloaded_size = sum(p['current'] - p['start'] for p in self.parts_info)
-            
-            # Start speed monitor
-            monitor_task = asyncio.create_task(self._speed_monitor())
-            
-            try:
-                await asyncio.gather(*self.active_tasks)
-            except asyncio.CancelledError:
-                if self.status != TaskStatus.ERROR:
-                    self.status = TaskStatus.CANCELED
-            except Exception as e:
-                self.status = TaskStatus.ERROR
-                self.error_message = str(e)
-            finally:
-                monitor_task.cancel()
-        finally:
-            if self.session and not self.session.closed:
-                await self.session.close()
+                    # Recalculate total downloaded size based on synced parts
+                    self.downloaded_size = sum(p['current'] - p['start'] for p in self.parts_info)
+                    
+                    # Start speed monitor
+                    monitor_task = asyncio.create_task(self._speed_monitor())
+                    
+                    try:
+                        await asyncio.gather(*self.active_tasks)
+                    except asyncio.CancelledError:
+                        if self.status != TaskStatus.ERROR:
+                            self.status = TaskStatus.CANCELED
+                    except RangeIgnoredError:
+                         raise # Handle outside gather
+                    except Exception as e:
+                        if not any(isinstance(x, RangeIgnoredError) for x in [e]):
+                             self.status = TaskStatus.ERROR
+                             self.error_message = str(e)
+                    finally:
+                        monitor_task.cancel()
+                finally:
+                    if self.session and not self.session.closed:
+                        await self.session.close()
+
+                # If we are here and valid, break loop
+                break
+
+            except RangeIgnoredError:
+                print("Caught RangeIgnoredError. Switching to single connection...")
+                
+                # Cancel all running parts immediately to prevent race conditions
+                if hasattr(self, 'active_tasks'):
+                    for t in self.active_tasks:
+                        if not t.done():
+                            t.cancel()
+                    
+                    # Wait for them to finish cancelling
+                    await asyncio.gather(*self.active_tasks, return_exceptions=True)
+                
+                self.supports_resume = False
+                self.num_connections = 1
+                self.parts_info = [] # Will force recalculation in next loop iter
+                self.downloaded_size = 0
+                
+                # Cleanup old parts
+                for filename in os.listdir(self.parts_dir):
+                    if filename.startswith(os.path.basename(self.filename) + ".part"):
+                        try:
+                            os.remove(os.path.join(self.parts_dir, filename))
+                        except Exception as e:
+                            print(f"Error removing part file: {e}")
+                
+                # Loop will retry with num_connections=1
+                continue
 
         if self.status != TaskStatus.ERROR and self.status != TaskStatus.CANCELED:
             await self.merge_parts()
