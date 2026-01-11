@@ -4,7 +4,7 @@
 .idea/
 *.log
 
-# Python / Backend
+# Python / server
 __pycache__/
 *.pyc
 *.pyo
@@ -12,13 +12,13 @@ __pycache__/
 venv/
 env/
 .env
-backend/downloads/
-backend/.parts/
-backend/*.db
-backend/state/
-backend/settings.json
-backend/token.pickle
-backend/credentials.json
+server/downloads/
+server/.parts/
+server/*.db
+server/state/
+server/settings.json
+server/token.pickle
+server/credentials.json
 
 # Node / Frontend
 node_modules/

@@ -1,0 +1,10 @@
+fastapi                     # framework to build APIs
+uvicorn                     # ASGI server
+aiohttp                     # Async HTTP client/server
+aiofiles                    # Async file operations
+pydantic                    # Data validation
+python-multipart            # File upload
+py7zr                       # 7z compression
+google-api-python-client    # Google API client
+google-auth-oauthlib        # OAuth 2.0 client
+google-auth-httplib2        # HTTP client

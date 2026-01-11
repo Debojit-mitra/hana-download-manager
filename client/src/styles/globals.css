@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Base styles for light theme (default) */
+:root {
+  --color-background: #ffffff;
+  --color-text: #1a202c;
+  --color-primary: #2c2a85;
+}
+
+/* Styles for dark theme, applied when the 'dark' class is present on the HTML element */
+.dark {
+  --color-background: #000000;
+  --color-text: #e2e8f0;
+  --color-primary: #818cf8;
+}
+
+/* Smooth scrolling for the entire page */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 20px; /* Offset for fixed headers if any */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-family: Arial, sans-serif;
+  overflow-x: hidden;
+}
