@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   backend:
-    build: ./backend
+    build: ./server
     ports:
       - "8000:8000"
     volumes:
@@ -14,7 +14,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./client
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:8000/api # change this to your backend url
         - NEXT_PUBLIC_OAUTH_REDIRECT_URI=http://localhost:3000/settings # change this to your frontend url for oauth redirect
