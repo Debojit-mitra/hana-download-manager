@@ -141,11 +141,11 @@ export async function initiateDriveAuth(redirectUri?: string): Promise<{
   status: string;
   auth_url?: string;
 }> {
-  const url = new URL(`/api/drive/auth`);
+  let url = `/api/drive/auth`;
   if (redirectUri) {
-    url.searchParams.append("redirect_uri", redirectUri);
+    url += `?redirect_uri=${encodeURIComponent(redirectUri)}`;
   }
-  const res = await fetch(url.toString());
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to initiate drive auth");
   return res.json();
 }
