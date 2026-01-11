@@ -1,5 +1,3 @@
-export const API_BASE_URL = "/api";
-
 export interface DownloadTask {
   id: string;
   url: string;
@@ -25,7 +23,7 @@ export interface DownloadTask {
 }
 
 export async function fetchDownloads(): Promise<DownloadTask[]> {
-  const res = await fetch(`${API_BASE_URL}/downloads`);
+  const res = await fetch(`/api/downloads`);
   if (!res.ok) throw new Error("Failed to fetch downloads");
   return res.json();
 }
@@ -37,7 +35,7 @@ export async function addDownload(
   speed_limit: number = 0,
   max_connections?: number
 ) {
-  const res = await fetch(`${API_BASE_URL}/downloads`, {
+  const res = await fetch(`/api/downloads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -54,9 +52,7 @@ export async function addDownload(
 
 export async function checkFileExists(filename: string): Promise<boolean> {
   const res = await fetch(
-    `${API_BASE_URL}/downloads/check_file?filename=${encodeURIComponent(
-      filename
-    )}`
+    `/api/downloads/check_file?filename=${encodeURIComponent(filename)}`
   );
   if (!res.ok) return false;
   const data = await res.json();
@@ -64,11 +60,11 @@ export async function checkFileExists(filename: string): Promise<boolean> {
 }
 
 export async function pauseDownload(id: string) {
-  await fetch(`${API_BASE_URL}/downloads/${id}/pause`, { method: "POST" });
+  await fetch(`/api/downloads/${id}/pause`, { method: "POST" });
 }
 
 export async function setSpeedLimit(id: string, limit: number) {
-  await fetch(`${API_BASE_URL}/downloads/${id}/limit`, {
+  await fetch(`/api/downloads/${id}/limit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ limit }),
@@ -76,7 +72,7 @@ export async function setSpeedLimit(id: string, limit: number) {
 }
 
 export async function refreshDownloadLink(id: string, url: string) {
-  await fetch(`${API_BASE_URL}/downloads/${id}/refresh_link`, {
+  await fetch(`/api/downloads/${id}/refresh_link`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
@@ -84,7 +80,7 @@ export async function refreshDownloadLink(id: string, url: string) {
 }
 
 export async function renameDownload(id: string, filename: string) {
-  const res = await fetch(`${API_BASE_URL}/downloads/${id}/rename`, {
+  const res = await fetch(`/api/downloads/${id}/rename`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ filename }),
@@ -96,11 +92,11 @@ export async function renameDownload(id: string, filename: string) {
 }
 
 export async function resumeDownload(id: string) {
-  await fetch(`${API_BASE_URL}/downloads/${id}/resume`, { method: "POST" });
+  await fetch(`/api/downloads/${id}/resume`, { method: "POST" });
 }
 
 export async function cancelDownload(id: string, deleteFile: boolean = false) {
-  await fetch(`${API_BASE_URL}/downloads/${id}?delete_file=${deleteFile}`, {
+  await fetch(`/api/downloads/${id}?delete_file=${deleteFile}`, {
     method: "DELETE",
   });
 }
@@ -113,13 +109,13 @@ export interface Settings {
 }
 
 export async function fetchSettings(): Promise<Settings> {
-  const res = await fetch(`${API_BASE_URL}/settings`);
+  const res = await fetch(`/api/settings`);
   if (!res.ok) throw new Error("Failed to fetch settings");
   return res.json();
 }
 
 export async function updateSettings(settings: Settings): Promise<Settings> {
-  const res = await fetch(`${API_BASE_URL}/settings`, {
+  const res = await fetch(`/api/settings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
@@ -136,7 +132,7 @@ export async function getDriveStatus(): Promise<{
   is_authenticated: boolean;
   has_credentials: boolean;
 }> {
-  const res = await fetch(`${API_BASE_URL}/drive/status`);
+  const res = await fetch(`/api/drive/status`);
   if (!res.ok) throw new Error("Failed to fetch drive status");
   return res.json();
 }
@@ -145,7 +141,7 @@ export async function initiateDriveAuth(redirectUri?: string): Promise<{
   status: string;
   auth_url?: string;
 }> {
-  const url = new URL(`${API_BASE_URL}/drive/auth`);
+  const url = new URL(`/api/drive/auth`);
   if (redirectUri) {
     url.searchParams.append("redirect_uri", redirectUri);
   }
@@ -158,7 +154,7 @@ export async function verifyDriveAuth(
   code: string,
   redirectUri?: string
 ): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE_URL}/drive/verify`, {
+  const res = await fetch(`/api/drive/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -177,7 +173,7 @@ export async function uploadDriveCredentials(file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE_URL}/drive/credentials`, {
+  const res = await fetch(`/api/drive/credentials`, {
     method: "POST",
     body: formData,
   });
@@ -192,7 +188,7 @@ export async function getDriveFileMetadata(
   fileId: string
 ): Promise<{ id: string; name: string; mimeType: string; size?: string }> {
   const res = await fetch(
-    `${API_BASE_URL}/drive/metadata?file_id=${encodeURIComponent(fileId)}`
+    `/api/drive/metadata?file_id=${encodeURIComponent(fileId)}`
   );
   if (!res.ok) throw new Error("Failed to fetch drive file metadata");
   return res.json();
@@ -206,7 +202,7 @@ export async function cloneDriveFile(
   speedLimit: number = 0,
   maxConnections: number = 0
 ) {
-  const res = await fetch(`${API_BASE_URL}/drive/clone`, {
+  const res = await fetch(`/api/drive/clone`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
