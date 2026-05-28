@@ -3,6 +3,7 @@ import aiohttp
 import aiofiles
 import os
 import json
+import urllib.parse
 from typing import List, Dict, Optional
 from enum import Enum
 import time
@@ -165,15 +166,36 @@ class DownloadTask:
 
     async def get_file_info(self):
         async with aiohttp.ClientSession(headers=self.headers) as session:
+            # First try HEAD request
             async with session.head(self.url) as response:
-                if response.status == 200:
-                    self.total_size = int(response.headers.get('Content-Length', 0))
-                    # Check for Accept-Ranges
-                    if response.headers.get('Accept-Ranges') == 'bytes':
-                        self.supports_resume = True
-                    else:
-                        self.supports_resume = False
-                        self.num_connections = 1 # Fallback to single connection
+                status = response.status
+                headers = response.headers
+            
+            # If HEAD fails (e.g., 403 for presigned GET URLs or 405), try a GET with Range
+            if status != 200:
+                headers_with_range = {"Range": "bytes=0-0"}
+                headers_with_range.update(self.headers)
+                async with session.get(self.url, headers=headers_with_range) as response:
+                    status = response.status
+                    headers = response.headers
+                    
+            if status in [200, 206]:
+                if status == 206 and 'Content-Range' in headers:
+                    # bytes 0-0/123456789
+                    cr = headers.get('Content-Range')
+                    try:
+                        self.total_size = int(cr.split('/')[-1])
+                    except (ValueError, AttributeError):
+                        self.total_size = int(headers.get('Content-Length', 0))
+                else:
+                    self.total_size = int(headers.get('Content-Length', 0))
+                    
+                # Check for resumability
+                if status == 206 or headers.get('Accept-Ranges') == 'bytes':
+                    self.supports_resume = True
+                else:
+                    self.supports_resume = False
+                    self.num_connections = 1 # Fallback to single connection
 
     async def download_part(self, session, part_id, start, end, current_pos):
         retries = 0
@@ -557,8 +579,20 @@ class DownloadManager:
 
     async def add_task(self, url: str, filename: str = None, auto_extract: bool = False, speed_limit: int = 0, max_connections: int = None, headers: Dict[str, str] = None):
         if not filename:
-            filename = url.split('/')[-1] or "downloaded_file"
+            parsed_url = urllib.parse.urlparse(url)
+            filename = os.path.basename(urllib.parse.unquote(parsed_url.path)) or "downloaded_file"
         
+        # Remove query parameters from filename if present
+        if '?' in filename:
+            filename = filename.split('?')[0]
+            
+        # Ensure filename doesn't contain query params even if provided weirdly, 
+        # but only if it's derived from URL or overly long.
+        # But actually, the state file max length is 255. Let's truncate if it's too long.
+        if len(filename) > 200:
+            name, ext = os.path.splitext(filename)
+            filename = name[:200 - len(ext)] + ext
+            
         # Auto-rename if exists
         filename = self.get_unique_filename(filename)
         
