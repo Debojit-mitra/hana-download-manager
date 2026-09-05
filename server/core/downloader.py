@@ -55,10 +55,11 @@ class RateLimiter:
                 await asyncio.sleep(wait_time)
 
 class DownloadTask:
-    def __init__(self, url: str, filename: str, download_dir: str, num_connections: int = 4, auto_extract: bool = False, headers: Dict[str, str] = None):
+    def __init__(self, url: str, filename: str, download_dir: str, num_connections: int = 4, auto_extract: bool = False, headers: Dict[str, str] = None, is_custom_name: bool = True):
         self.id = str(int(time.time() * 1000))  # Simple ID generation
         self.url = url
         self.filename = filename
+        self.is_custom_name = is_custom_name
         self.download_dir = download_dir
         self.filepath = os.path.join(download_dir, filename)
         self.num_connections = num_connections
@@ -140,7 +141,8 @@ class DownloadTask:
             "supports_resume": self.supports_resume,
             "num_connections": self.num_connections,
             "headers": self.headers,
-            "completed_at": self.completed_at
+            "completed_at": self.completed_at,
+            "is_custom_name": self.is_custom_name
         }
         with open(self.state_file, 'w') as f:
             json.dump(state, f)
@@ -161,6 +163,7 @@ class DownloadTask:
                 self.num_connections = state.get("num_connections", self.num_connections)
                 self.headers = state.get("headers", {})
                 self.completed_at = state.get("completed_at", 0)
+                self.is_custom_name = state.get("is_custom_name", True)
                 return True
         return False
 
@@ -180,6 +183,32 @@ class DownloadTask:
                     headers = response.headers
                     
             if status in [200, 206]:
+                cd = headers.get('Content-Disposition')
+                if cd and not getattr(self, 'is_custom_name', True):
+                    import re
+                    new_filename = None
+                    match = re.search(r"filename\*=UTF-8''(.+)", cd, re.IGNORECASE)
+                    if match:
+                        new_filename = urllib.parse.unquote(match.group(1).split(';')[0])
+                    else:
+                        match = re.search(r'filename="([^"]+)"', cd, re.IGNORECASE)
+                        if match:
+                            new_filename = match.group(1)
+                        else:
+                            match = re.search(r'filename=([^; ]+)', cd, re.IGNORECASE)
+                            if match:
+                                new_filename = match.group(1)
+                    
+                    if new_filename:
+                        new_filename = os.path.basename(new_filename.strip())
+                        if new_filename and new_filename != self.filename:
+                            try:
+                                new_unique_filename = manager.get_unique_filename(new_filename)
+                                print(f"Auto-renaming task {self.id} to {new_unique_filename}")
+                                await manager.rename_task(self.id, new_unique_filename)
+                            except Exception as e:
+                                print(f"Failed to auto-rename task: {e}")
+
                 if status == 206 and 'Content-Range' in headers:
                     # bytes 0-0/123456789
                     cr = headers.get('Content-Range')
@@ -578,6 +607,7 @@ class DownloadManager:
             counter += 1
 
     async def add_task(self, url: str, filename: str = None, auto_extract: bool = False, speed_limit: int = 0, max_connections: int = None, headers: Dict[str, str] = None):
+        is_custom_name = bool(filename)
         if not filename:
             parsed_url = urllib.parse.urlparse(url)
             filename = os.path.basename(urllib.parse.unquote(parsed_url.path)) or "downloaded_file"
@@ -600,7 +630,7 @@ class DownloadManager:
         # Use provided max_connections or fallback to settings
         connections = max_connections if max_connections and max_connections > 0 else settings.max_connections_per_task
         
-        task = DownloadTask(url, filename, settings.download_dir, connections, auto_extract, headers=headers)
+        task = DownloadTask(url, filename, settings.download_dir, connections, auto_extract, headers=headers, is_custom_name=is_custom_name)
         
         if speed_limit > 0:
             task.set_speed_limit(speed_limit)
